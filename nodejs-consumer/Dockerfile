@@ -1,20 +1,23 @@
 FROM node:24-alpine
 
-# Create non-root user with UID/GID 1000
-RUN addgroup -g 1000 appuser && \
-  adduser -D -u 1000 -G appuser appuser
+# Create non-root user with UID/GID 1001 (avoiding system user 1000)
+RUN addgroup -g 1001 appuser && \
+  adduser -D -u 1001 -G appuser appuser
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package.json only (package-lock.json doesn't exist yet)
+COPY package.json ./
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Generate package-lock.json and install all dependencies first
+RUN npm install
 
 # Copy application code
 COPY . .
+
+# Install only production dependencies for runtime (clean install)
+RUN npm ci --only=production && npm cache clean --force
 
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app

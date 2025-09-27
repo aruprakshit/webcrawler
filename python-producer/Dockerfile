@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-# Create non-root user with UID/GID 1000
-RUN groupadd -g 1000 appuser && \
-  useradd -r -u 1000 -g appuser appuser
+# Create non-root user with UID/GID 1001
+RUN groupadd -g 1001 appuser && \
+  useradd -r -u 1001 -g appuser appuser
 
 # Set working directory
 WORKDIR /app

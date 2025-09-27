@@ -27,9 +27,9 @@ fi
 echo "📁 Creating directories..."
 mkdir -p data/{kafka,redis,minio,cassandra,prometheus,grafana}
 
-# Set proper permissions for non-root user (UID/GID 1000)
+# Set proper permissions for non-root user (UID/GID 1001)
 echo "🔐 Setting permissions..."
-sudo chown -R 1000:1000 data/
+sudo chown -R 1001:1001 data/
 
 # Start infrastructure services first
 echo "🏗️  Starting infrastructure services..."
@@ -54,7 +54,7 @@ docker-compose up -d python-producer nodejs-consumer
 
 # Start monitoring services
 echo "📊 Starting monitoring services..."
-docker-compose up -d prometheus grafana
+docker-compose up -d prometheus grafana kafka-ui
 
 # Wait for all services to be ready
 echo "⏳ Waiting for all services to be ready..."
@@ -71,6 +71,7 @@ echo ""
 echo "📊 Monitoring:"
 echo "  - Prometheus: http://localhost:9090"
 echo "  - Grafana: http://localhost:3000 (admin/admin123)"
+echo "  - Kafka UI: http://localhost:8080"
 echo ""
 echo "🗄️  Storage:"
 echo "  - MinIO Console: http://localhost:9001 (minioadmin/minioadmin123)"

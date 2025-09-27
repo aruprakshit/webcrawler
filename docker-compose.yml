@@ -3,7 +3,6 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
     container_name: webcrawler-zookeeper
-    user: "1000:1000"
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -17,7 +16,6 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.4.0
     container_name: webcrawler-kafka
-    user: "1000:1000"
     depends_on:
       - zookeeper
     ports:
@@ -38,7 +36,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: webcrawler-redis
-    user: "1000:1000"
     ports:
       - "6379:6379"
     command: redis-server --appendonly yes
@@ -51,7 +48,6 @@ services:
   minio:
     image: minio/minio:latest
     container_name: webcrawler-minio
-    user: "1000:1000"
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -68,7 +64,6 @@ services:
   cassandra:
     image: cassandra:4.1
     container_name: webcrawler-cassandra
-    user: "1000:1000"
     ports:
       - "9042:9042"
     environment:
@@ -86,7 +81,7 @@ services:
       context: ./python-producer
       dockerfile: Dockerfile
     container_name: webcrawler-python-producer
-    user: "1000:1000"
+    user: "1001:1001"
     depends_on:
       - kafka
       - redis
@@ -108,7 +103,7 @@ services:
       context: ./nodejs-consumer
       dockerfile: Dockerfile
     container_name: webcrawler-nodejs-consumer
-    user: "1000:1000"
+    user: "1001:1001"
     depends_on:
       - kafka
       - redis
@@ -132,7 +127,6 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: webcrawler-prometheus
-    user: "1000:1000"
     ports:
       - "9090:9090"
     volumes:
@@ -150,13 +144,27 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: webcrawler-grafana
-    user: "1000:1000"
     ports:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin123
     volumes:
       - grafana-data:/var/lib/grafana
+    networks:
+      - webcrawler-network
+
+  # Kafka UI for Kafka dashboard
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: webcrawler-kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: webcrawler-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    depends_on:
+      - kafka
     networks:
       - webcrawler-network
 
