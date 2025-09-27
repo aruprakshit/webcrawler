@@ -13,6 +13,7 @@ import cassandra from 'cassandra-driver';
 import prometheus from 'prom-client';
 import winston from 'winston';
 import pLimit from 'p-limit';
+import express from 'express';
 
 // Configure logging
 const logger = winston.createLogger({
@@ -90,8 +91,10 @@ class WebCrawlerConsumer {
 
     // Redis client
     this.redisClient = Redis.createClient({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379')
+      socket: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379')
+      }
     });
 
     await this.redisClient.connect();
@@ -299,7 +302,6 @@ class WebCrawlerConsumer {
     logger.info('Starting Web Crawler Consumer...');
 
     // Start metrics server
-    const express = require('express');
     const app = express();
     
     app.get('/metrics', async (req, res) => {
