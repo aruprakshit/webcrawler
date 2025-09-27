@@ -3,7 +3,7 @@
  * Health check script for Docker
  */
 
-const http = require('http');
+import http from 'http';
 
 const options = {
   hostname: 'localhost',

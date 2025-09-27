@@ -7,23 +7,20 @@ RUN addgroup -g 1001 appuser && \
 # Set working directory
 WORKDIR /app
 
-# Copy package.json only (package-lock.json doesn't exist yet)
+# Copy package.json only
 COPY package.json ./
-
-# Generate package-lock.json and install all dependencies first
-RUN npm install
 
 # Copy application code
 COPY . .
 
-# Install only production dependencies for runtime (clean install)
-RUN npm ci --only=production && npm cache clean --force
-
-# Change ownership to non-root user
+# Change ownership to non-root user first
 RUN chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
+
+# Install dependencies as non-root user
+RUN npm install --omit=dev && npm cache clean --force
 
 # Expose port (if needed for health checks)
 EXPOSE 3001

@@ -4,15 +4,15 @@
  * Handles web page downloading and content storage
  */
 
-const { Kafka } = require('kafkajs');
-const axios = require('axios');
-const cheerio = require('cheerio');
-const Minio = require('minio');
-const Redis = require('redis');
-const cassandra = require('cassandra-driver');
-const prometheus = require('prom-client');
-const winston = require('winston');
-const pLimit = require('p-limit');
+import { Kafka } from 'kafkajs';
+import axios from 'axios';
+//import * as cheerio from 'cheerio';
+import * as Minio from 'minio';
+import Redis from 'redis';
+import cassandra from 'cassandra-driver';
+import prometheus from 'prom-client';
+import winston from 'winston';
+import pLimit from 'p-limit';
 
 // Configure logging
 const logger = winston.createLogger({
@@ -72,7 +72,7 @@ class WebCrawlerConsumer {
     logger.info('Initializing Web Crawler Consumer...');
 
     // Kafka consumer
-    this.kafka = Kafka({
+    this.kafka = new Kafka({
       clientId: 'webcrawler-consumer',
       brokers: (process.env.KAFKA_BOOTSTRAP_SERVERS || 'localhost:9092').split(',')
     });
@@ -381,8 +381,9 @@ async function main() {
   }
 }
 
-if (require.main === module) {
+// ES module equivalent of require.main === module
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(console.error);
 }
 
-module.exports = WebCrawlerConsumer;
+export default WebCrawlerConsumer;
