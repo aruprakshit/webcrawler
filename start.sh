@@ -33,7 +33,7 @@ sudo chown -R 1001:1001 data/
 
 # Start infrastructure services first
 echo "🏗️  Starting infrastructure services..."
-docker-compose up -d zookeeper kafka redis cassandra minio
+docker compose up -d zookeeper kafka redis cassandra minio
 
 # Wait for services to be ready
 echo "⏳ Waiting for services to be ready..."
@@ -41,20 +41,20 @@ sleep 30
 
 # Check if Kafka is ready
 echo "🔍 Checking Kafka readiness..."
-timeout 60 bash -c 'until docker-compose exec kafka kafka-topics --bootstrap-server localhost:9092 --list; do sleep 2; done'
+timeout 60 bash -c 'until docker compose exec kafka kafka-topics --bootstrap-server localhost:9092 --list; do sleep 2; done'
 
 # Create Kafka topics
 echo "📋 Creating Kafka topics..."
-docker-compose exec kafka kafka-topics --bootstrap-server localhost:9092 --create --topic urls-to-crawl --partitions 3 --replication-factor 1 || true
-docker-compose exec kafka kafka-topics --bootstrap-server localhost:9092 --create --topic crawled-content --partitions 3 --replication-factor 1 || true
+docker compose exec kafka kafka-topics --bootstrap-server localhost:9092 --create --topic urls-to-crawl --partitions 3 --replication-factor 1 || true
+docker compose exec kafka kafka-topics --bootstrap-server localhost:9092 --create --topic crawled-content --partitions 3 --replication-factor 1 || true
 
 # Start application services
 echo "🚀 Starting application services..."
-docker-compose up -d python-producer nodejs-consumer
+docker compose up -d python-producer nodejs-consumer
 
 # Start monitoring services
 echo "📊 Starting monitoring services..."
-docker-compose up -d prometheus grafana kafka-ui
+docker compose up -d prometheus grafana kafka-ui
 
 # Wait for all services to be ready
 echo "⏳ Waiting for all services to be ready..."
@@ -62,7 +62,7 @@ sleep 20
 
 # Display service status
 echo "📋 Service Status:"
-docker-compose ps
+docker compose ps
 
 # Display access information
 echo ""
@@ -81,8 +81,8 @@ echo "  - Python Producer: http://localhost:8000/health"
 echo "  - Node.js Consumer: http://localhost:3001/health"
 echo ""
 echo "📝 Logs:"
-echo "  - View all logs: docker-compose logs -f"
-echo "  - Python Producer: docker-compose logs -f python-producer"
-echo "  - Node.js Consumer: docker-compose logs -f nodejs-consumer"
+echo "  - View all logs: docker compose logs -f"
+echo "  - Python Producer: docker compose logs -f python-producer"
+echo "  - Node.js Consumer: docker compose logs -f nodejs-consumer"
 echo ""
-echo "🛑 To stop the system: docker-compose down"
+echo "🛑 To stop the system: docker compose down"
