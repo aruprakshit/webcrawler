@@ -1,9 +1,5 @@
 FROM python:3.11-slim
 
-# Create non-root user with UID/GID 1001
-RUN groupadd -g 1001 appuser && \
-  useradd -r -u 1001 -g appuser appuser
-
 # Set working directory
 WORKDIR /app
 
@@ -20,11 +16,15 @@ RUN apt-get update && \
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Install Python dependencies as root (system-wide)
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+
+# Create non-root user with UID/GID 1001
+RUN groupadd -g 1001 appuser && \
+  useradd -r -u 1001 -g appuser appuser
 
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app
