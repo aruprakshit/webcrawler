@@ -1,0 +1,79 @@
+╭───────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  > @webcrawler.txt In this system design plan, we talked about back pressure. What does it mean?  │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+✦ In the context of this system design, back pressure refers to a mechanism for handling a situation where one part of the system is producing data or tasks faster than another part can consume them.
+
+  Think of it like an assembly line:
+
+   * Producer: A worker who quickly places items onto a conveyor belt (e.g., the Parser finding new URLs).
+   * Consumer: A worker at the end of the line who slowly packages those items (e.g., the Crawler Worker downloading the pages).
+   * Buffer: The conveyor belt itself (e.g., the Kafka queue).
+
+  If the producer is much faster than the consumer, the conveyor belt will fill up and items will start falling off. The system breaks down.
+
+  Back pressure is the signal that the conveyor belt is full, which tells the fast producer to slow down or stop until the consumer has caught up.
+
+  In your web crawler design:
+
+   1. The Producer: The parsing component can find hundreds of new URLs on a single webpage very quickly.
+   2. The Consumer: The crawler worker is much slower because it has to make network requests, respect politeness delays, and download content.
+   3. The Problem: The system could find new URLs much faster than it can crawl them.
+
+  The document states that Kafka provides "back-pressure handling." It does this by acting as a massive buffer. The parsers can dump millions of URLs into the Kafka queue. The crawler workers pull from that queue
+  at their own, slower pace.
+
+  This prevents the fast producers from overwhelming the slow consumers, making the entire system more resilient and stable. The size of the queue in Kafka is a direct measure of the "pressure" in the system.
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  > I found above it was said that  We should also cache robots.txt files. But why should we cache, please explain me.  │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+✦ Of course. Caching robots.txt files is a critical optimization for any large-scale web crawler. Here’s a breakdown of why it's so important:
+
+  The Core Problem: Redundant Downloads
+
+  A web crawler must respect the robots.txt file for a domain before it requests any page from that domain.
+
+  Imagine your crawler has a list of 10,000 URLs to download from wikipedia.org:
+   * wikipedia.org/wiki/Cat
+   * wikipedia.org/wiki/Dog
+   * wikipedia.org/wiki/System_design
+   * ... and 9,997 more.
+
+  Without a cache, the process for each and every URL would be:
+   1. Download http://wikipedia.org/robots.txt.
+   2. Parse the file to see if crawling /wiki/Cat is allowed.
+   3. If allowed, download http://wikipedia.org/wiki/Cat.
+
+  For the next URL, wikipedia.org/wiki/Dog, it would repeat the exact same first step:
+   1. Download http://wikipedia.org/robots.txt again.
+   2. Parse the file to see if crawling /wiki/Dog is allowed.
+   3. If allowed, download http://wikipedia.org/wiki/Dog.
+
+  This leads to downloading the same robots.txt file 10,000 times, which is extremely inefficient.
+
+  The Benefits of Caching
+
+  By caching the robots.txt file, the process becomes much smarter:
+
+   1. First URL (`/wiki/Cat`):
+       * Check the cache for wikipedia.org's robots.txt. It's not there.
+       * Download http://wikipedia.org/robots.txt.
+       * Store the content in the cache (e.g., Redis) with a key like "robots:wikipedia.org".
+       * Parse the rules and proceed to download the page.
+
+   2. Second URL (`/wiki/Dog`):
+       * Check the cache for wikipedia.org's robots.txt. It's found!
+       * Read the rules directly from the fast, in-memory cache.
+       * Parse the rules and proceed to download the page.
+
+  This simple change provides three major advantages:
+
+   1. Massive Performance Gain: You replace a slow network request (downloading the file) with a very fast in-memory lookup (from Redis or a local cache). This significantly increases the crawler's throughput.
+
+   2. Reduced Load on Target Servers (Politeness): This is crucial. Hitting a server for the same file thousands of times per minute is considered aggressive and impolite. It puts unnecessary load on their
+      infrastructure and can easily get your crawler's IP address banned. A well-behaved crawler minimizes its footprint.
+
+   3. Lower Bandwidth Costs: You save bandwidth on both your end and the server's end by eliminating redundant downloads.
+
+  To handle updates, the cached robots.txt files are stored with a Time-To-Live (TTL), typically 24 hours. After the TTL expires, the crawler will fetch a fresh copy on its next visit to the domain. 
