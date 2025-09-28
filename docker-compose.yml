@@ -123,7 +123,6 @@ services:
       MINIO_SECRET_KEY: minioadmin123
     volumes:
       - ./nodejs-consumer:/app
-      - /app/node_modules
     networks:
       - webcrawler-network
 

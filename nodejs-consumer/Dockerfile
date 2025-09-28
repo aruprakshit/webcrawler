@@ -7,20 +7,20 @@ RUN addgroup -g 1001 appuser && \
 # Set working directory
 WORKDIR /app
 
-# Copy package.json only
+# Copy package.json first for better layer caching
 COPY package.json ./
+
+# Install dependencies as root (before copying source code)
+RUN npm install --omit=dev && npm cache clean --force
 
 # Copy application code
 COPY . .
 
-# Change ownership to non-root user first
+# Change ownership to non-root user (after all files are copied)
 RUN chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
-
-# Install dependencies as non-root user
-RUN npm install --omit=dev && npm cache clean --force
 
 # Expose port (if needed for health checks)
 EXPOSE 3001
