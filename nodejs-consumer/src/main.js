@@ -81,7 +81,15 @@ class WebCrawlerConsumer {
     });
 
     this.consumer = this.kafka.consumer({ groupId: 'webcrawler-group' });
-    this.producer = this.kafka.producer();
+    this.producer = this.kafka.producer({
+      maxInFlightRequests: 1,
+      idempotent: true,
+      retry: {
+        initialRetryTime: 100,
+        retries: 8
+      },
+      acks: 'all'
+    });
 
     // MinIO client
     this.minioClient = new Minio.Client({
@@ -274,20 +282,35 @@ class WebCrawlerConsumer {
       await this.updateUrlStatus(url, domain, 'crawled', contentId);
 
       // Send crawled content to Kafka for link extraction
-      await this.producer.send({
-        topic: 'crawled-content',
-        messages: [{
-          key: domain,
-          value: JSON.stringify({
-            url,
-            domain,
-            content,
-            contentId,
-            contentType,
-            crawledAt: new Date().toISOString()
-          })
-        }]
-      });
+      const messageData = {
+        url,
+        domain,
+        content,
+        contentId,
+        contentType,
+        crawledAt: new Date().toISOString()
+      };
+      
+      const messageString = JSON.stringify(messageData);
+      const messageSize = Buffer.byteLength(messageString, 'utf8');
+      
+      logger.info(`Sending message to Kafka - Size: ${messageSize} bytes, URL: ${url}`);
+      logger.info(`Content size: ${content.length} chars, Message size: ${messageSize} bytes`);
+      
+      try {
+        await this.producer.send({
+          topic: 'crawled-content',
+          messages: [{
+            key: domain,
+            value: messageString
+          }]
+        });
+        logger.info(`Successfully sent message to Kafka for ${url}`);
+      } catch (error) {
+        logger.error(`Failed to send message to Kafka for ${url}:`, error.message);
+        logger.error(`Message size was: ${messageSize} bytes`);
+        throw error;
+      }
 
       logger.info(`Successfully crawled: ${url}`);
       
