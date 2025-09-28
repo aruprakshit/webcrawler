@@ -14,6 +14,7 @@ import prometheus from 'prom-client';
 import winston from 'winston';
 import pLimit from 'p-limit';
 import express from 'express';
+import crypto from 'crypto';
 
 // Configure logging
 const logger = winston.createLogger({
@@ -62,6 +63,7 @@ class WebCrawlerConsumer {
   constructor() {
     this.kafka = null;
     this.consumer = null;
+    this.producer = null;
     this.minioClient = null;
     this.redisClient = null;
     this.cassandraClient = null;
@@ -79,6 +81,7 @@ class WebCrawlerConsumer {
     });
 
     this.consumer = this.kafka.consumer({ groupId: 'webcrawler-group' });
+    this.producer = this.kafka.producer();
 
     // MinIO client
     this.minioClient = new Minio.Client({
@@ -236,6 +239,22 @@ class WebCrawlerConsumer {
       // Update Cassandra
       await this.updateUrlStatus(url, domain, 'crawled', contentId);
 
+      // Send crawled content to Kafka for link extraction
+      await this.producer.send({
+        topic: 'crawled-content',
+        messages: [{
+          key: domain,
+          value: JSON.stringify({
+            url,
+            domain,
+            content,
+            contentId,
+            contentType,
+            crawledAt: new Date().toISOString()
+          })
+        }]
+      });
+
       logger.info(`Successfully crawled: ${url}`);
       
       return {
@@ -259,7 +278,7 @@ class WebCrawlerConsumer {
 
   generateContentId(url) {
     const timestamp = Date.now();
-    const urlHash = require('crypto')
+    const urlHash = crypto
       .createHash('md5')
       .update(url)
       .digest('hex')
@@ -269,7 +288,7 @@ class WebCrawlerConsumer {
 
   async updateUrlStatus(url, domain, status, contentId = null) {
     try {
-      const urlHash = require('crypto')
+      const urlHash = crypto
         .createHash('md5')
         .update(url)
         .digest('hex');
@@ -319,6 +338,7 @@ class WebCrawlerConsumer {
 
     // Connect to Kafka
     await this.consumer.connect();
+    await this.producer.connect();
     await this.consumer.subscribe({ topic: 'urls-to-crawl', fromBeginning: false });
 
     // Start consuming messages
@@ -340,6 +360,10 @@ class WebCrawlerConsumer {
     
     if (this.consumer) {
       await this.consumer.disconnect();
+    }
+    
+    if (this.producer) {
+      await this.producer.disconnect();
     }
     
     if (this.redisClient) {

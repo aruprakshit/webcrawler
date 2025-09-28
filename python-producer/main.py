@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import aiohttp
 import tldextract
 from bs4 import BeautifulSoup
-from kafka import KafkaProducer
+from kafka import KafkaProducer, KafkaConsumer
 from pybloom_live import BloomFilter
 from cassandra.cluster import Cluster
 import redis
@@ -52,6 +52,14 @@ class URLProducer:
             bootstrap_servers=kafka_servers.split(','),
             value_serializer=lambda v: v.encode('utf-8'),
             key_serializer=lambda k: k.encode('utf-8') if k else None
+        )
+        
+        # Kafka consumer for crawled content
+        self.kafka_consumer = KafkaConsumer(
+            'crawled-content',
+            bootstrap_servers=kafka_servers.split(','),
+            value_deserializer=lambda m: m.decode('utf-8'),
+            group_id='url-producer-group'
         )
         
         # Redis for caching
@@ -235,6 +243,38 @@ class URLProducer:
         except Exception as e:
             logger.error(f"Failed to mark URL as seen: {e}")
     
+    async def inject_seed_urls(self):
+        """Inject initial seed URLs into the urls-to-crawl topic"""
+        seed_urls = [
+            "https://en.wikipedia.org/wiki/History_of_India",
+            "https://en.wikipedia.org/wiki/Lists_of_films", 
+            "https://en.wikipedia.org/wiki/Animal"
+        ]
+        
+        logger.info(f"Injecting {len(seed_urls)} seed URLs into the system...")
+        
+        for url in seed_urls:
+            try:
+                domain = self.extract_domain(url)
+                if domain:
+                    # Send seed URL to urls-to-crawl topic
+                    self.kafka_producer.send(
+                        'urls-to-crawl',
+                        key=domain,
+                        value=url
+                    )
+                    self.kafka_producer.flush()
+                    
+                    # Mark as seen to avoid duplicates
+                    await self.mark_url_seen(url, domain)
+                    
+                    logger.info(f"Injected seed URL: {url}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to inject seed URL {url}: {e}")
+        
+        logger.info("Seed URL injection completed")
+
     async def process_crawled_url(self, crawled_url: CrawledURL):
         """Process a crawled URL and extract new links"""
         try:
@@ -269,6 +309,8 @@ class URLProducer:
                         key=domain,
                         value=link
                     )
+                    # Flush to ensure message is sent immediately
+                    self.kafka_producer.flush()
                     
                     URLS_DISCOVERED.inc()
                     logger.info(f"Discovered new URL: {link}")
@@ -286,30 +328,33 @@ class URLProducer:
         # Start metrics server
         start_http_server(8000)
         
+        # Inject seed URLs at startup
+        await self.inject_seed_urls()
+        
         # Main processing loop
         while True:
             try:
-                # In a real implementation, this would consume from a Kafka topic
-                # containing crawled URLs. For now, we'll simulate with seed URLs
-                seed_urls = [
-                    "https://en.wikipedia.org/wiki/History_of_India",
-                    "https://en.wikipedia.org/wiki/Lists_of_films",
-                    "https://en.wikipedia.org/wiki/Animal"
-                ]
-                
-                for url in seed_urls:
-                    # Simulate processing a crawled URL
-                    domain = self.extract_domain(url)
-                    if domain:
+                # Consume from crawled-content topic
+                for message in self.kafka_consumer:
+                    try:
+                        # Parse the crawled content message
+                        import json
+                        crawled_data = json.loads(message.value)
+                        
+                        # Create CrawledURL object
                         crawled_url = CrawledURL(
-                            url=url,
-                            domain=domain,
-                            content="<html><body><a href='https://example.com/page1'>Link</a></body></html>",
+                            url=crawled_data['url'],
+                            domain=crawled_data['domain'],
+                            content=crawled_data['content'],
                             links=[]
                         )
+                        
+                        # Process the crawled URL to extract new links
                         await self.process_crawled_url(crawled_url)
-                
-                await asyncio.sleep(10)  # Process every 10 seconds
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process crawled content message: {e}")
+                        continue
                 
             except KeyboardInterrupt:
                 logger.info("Shutting down URL Producer...")
@@ -324,6 +369,8 @@ class URLProducer:
             await self.session.close()
         if self.kafka_producer:
             self.kafka_producer.close()
+        if self.kafka_consumer:
+            self.kafka_consumer.close()
         if self.cassandra_session:
             self.cassandra_session.shutdown()
 

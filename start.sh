@@ -50,7 +50,7 @@ docker compose exec kafka kafka-topics --bootstrap-server localhost:9092 --creat
 
 # Start application services
 echo "🚀 Starting application services..."
-docker compose up -d python-producer nodejs-consumer
+docker compose up -d python-producer nodejs-consumer --build --wait
 
 # Start monitoring services
 echo "📊 Starting monitoring services..."
