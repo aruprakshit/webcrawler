@@ -87,7 +87,6 @@ services:
     build:
       context: ./python-producer
       dockerfile: Dockerfile
-    container_name: webcrawler-python-producer
     user: "1001:1001"
     depends_on:
       - kafka
@@ -113,7 +112,6 @@ services:
     build:
       context: ./nodejs-consumer
       dockerfile: Dockerfile
-    container_name: webcrawler-nodejs-consumer
     depends_on:
       - kafka
       - redis
