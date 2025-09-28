@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Web Crawler Consumer Service - Node.js",
   "type": "module",
-  "main": "main.js",
+  "main": "src/main.js",
   "scripts": {
     "start": "node main.js",
     "dev": "nodemon main.js",
