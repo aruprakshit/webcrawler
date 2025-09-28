@@ -143,7 +143,14 @@ class URLProducer:
     def extract_domain(self, url: str) -> str:
         """Extract domain from URL"""
         try:
-            extracted = tldextract.extract(url)
+            # Configure tldextract to use a writable cache directory
+            import os
+            cache_dir = os.getenv("TLDEXTRACT_CACHE_DIR", "/app/cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            # Create tldextract instance with custom cache directory
+            extractor = tldextract.TLDExtract(cache_dir=cache_dir)
+            extracted = extractor(url)
             return f"{extracted.domain}.{extracted.suffix}"
         except Exception as e:
             logger.warning(f"Failed to extract domain from {url}: {e}")
@@ -323,9 +330,11 @@ class URLProducer:
 async def main():
     """Main entry point"""
     # Configure logging
+    import os
+    log_dir = os.getenv("LOG_DIR", "/app/logs")
     logger.remove()
     logger.add(sys.stdout, level="INFO")
-    logger.add("producer.log", rotation="10 MB", level="DEBUG")
+    logger.add(f"{log_dir}/producer.log", rotation="10 MB", level="DEBUG")
     
     producer = URLProducer()
     

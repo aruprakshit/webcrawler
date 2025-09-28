@@ -26,8 +26,10 @@ COPY . .
 RUN groupadd -g 1001 appuser && \
   useradd -r -u 1001 -g appuser appuser
 
-# Change ownership to non-root user
-RUN chown -R appuser:appuser /app
+# Create logs and cache directories and ensure proper permissions
+RUN mkdir -p /app/logs /app/cache && \
+  chown -R appuser:appuser /app && \
+  chmod -R 775 /app
 
 # Switch to non-root user
 USER appuser

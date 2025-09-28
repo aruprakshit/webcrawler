@@ -95,8 +95,12 @@ services:
       REDIS_PORT: 6379
       CASSANDRA_HOST: cassandra
       CASSANDRA_PORT: 9042
+      LOG_DIR: /app/logs
+      TLDEXTRACT_CACHE_DIR: /app/cache
     volumes:
       - ./python-producer:/app
+      - python-producer-logs:/app/logs
+      - python-producer-cache:/app/cache
     networks:
       - webcrawler-network
 
@@ -181,6 +185,8 @@ volumes:
   cassandra-data:
   prometheus-data:
   grafana-data:
+  python-producer-logs:
+  python-producer-cache:
 
 
 networks:
