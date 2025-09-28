@@ -73,8 +73,8 @@ class URLProducer:
         cluster = Cluster([cassandra_host], port=cassandra_port)
         self.cassandra_session = cluster.connect()
         
-        # Initialize Cassandra keyspace and table
-        await self._init_cassandra_schema()
+        # Connect to existing Cassandra keyspace
+        self.cassandra_session.set_keyspace('webcrawler')
         
         # Bloom filter for fast duplicate detection
         # 1 billion URLs with 1% false positive rate
@@ -88,45 +88,6 @@ class URLProducer:
         
         logger.info("URL Producer initialized successfully")
     
-    async def _init_cassandra_schema(self):
-        """Initialize Cassandra keyspace and tables"""
-        try:
-            # Create keyspace
-            self.cassandra_session.execute("""
-                CREATE KEYSPACE IF NOT EXISTS webcrawler 
-                WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 1}
-            """)
-            
-            # Use keyspace
-            self.cassandra_session.set_keyspace('webcrawler')
-            
-            # Create URL tracking table
-            self.cassandra_session.execute("""
-                CREATE TABLE IF NOT EXISTS urls (
-                    url_hash text PRIMARY KEY,
-                    url text,
-                    domain text,
-                    status text,
-                    discovered_at timestamp,
-                    last_crawled timestamp
-                )
-            """)
-            
-            # Create domain tracking table
-            self.cassandra_session.execute("""
-                CREATE TABLE IF NOT EXISTS domains (
-                    domain text PRIMARY KEY,
-                    robots_txt text,
-                    robots_txt_updated timestamp,
-                    crawl_delay int,
-                    last_crawled timestamp
-                )
-            """)
-            
-            logger.info("Cassandra schema initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize Cassandra schema: {e}")
-            raise
     
     def normalize_url(self, url: str, base_url: str = None) -> str:
         """Normalize URL to standard form"""
@@ -164,30 +125,6 @@ class URLProducer:
             logger.warning(f"Failed to extract domain from {url}: {e}")
             return None
     
-    async def check_robots_txt(self, domain: str) -> bool:
-        """Check if URL is allowed by robots.txt"""
-        try:
-            # Check cache first
-            cache_key = f"robots:{domain}"
-            cached_rules = self.redis_client.get(cache_key)
-            
-            if cached_rules:
-                # Parse cached rules (simplified)
-                return "Disallow: /" not in cached_rules
-            
-            # Fetch robots.txt
-            robots_url = f"http://{domain}/robots.txt"
-            async with self.session.get(robots_url) as response:
-                if response.status == 200:
-                    robots_content = await response.text()
-                    # Cache for 24 hours
-                    self.redis_client.setex(cache_key, 86400, robots_content)
-                    return "Disallow: /" not in robots_content
-            
-            return True  # Allow if robots.txt not found
-        except Exception as e:
-            logger.warning(f"Failed to check robots.txt for {domain}: {e}")
-            return True  # Allow on error
     
     async def parse_html_content(self, content: str, base_url: str) -> List[str]:
         """Parse HTML content and extract links"""
@@ -248,7 +185,9 @@ class URLProducer:
         seed_urls = [
             "https://en.wikipedia.org/wiki/History_of_India",
             "https://en.wikipedia.org/wiki/Lists_of_films", 
-            "https://en.wikipedia.org/wiki/Animal"
+            "https://en.wikipedia.org/wiki/Animal",
+            "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference",
+            "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements"
         ]
         
         logger.info(f"Injecting {len(seed_urls)} seed URLs into the system...")
@@ -293,11 +232,6 @@ class URLProducer:
                     
                     # Check if URL already seen
                     if await self.is_url_seen(link):
-                        continue
-                    
-                    # Check robots.txt
-                    if not await self.check_robots_txt(domain):
-                        logger.info(f"URL {link} blocked by robots.txt")
                         continue
                     
                     # Mark as seen

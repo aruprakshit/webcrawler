@@ -75,8 +75,12 @@ services:
       CASSANDRA_RACK: rack1
     volumes:
       - cassandra-data:/var/lib/cassandra
+      - ./cassandra-schema.sql:/app/cassandra-schema.sql
+      - ./wait-for-cassandra.sh:/app/wait-for-cassandra.sh
     networks:
       - webcrawler-network
+    post_start:
+      - command: /app/wait-for-cassandra.sh
 
   # Python Producer Service
   python-producer:

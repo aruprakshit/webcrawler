@@ -138,22 +138,27 @@ class WebCrawlerConsumer {
     }
   }
 
-  async getRobotsTxtRules(domain) {
+  async getRobotsTxtRules(domain, url = null) {
     try {
       // Check Redis cache first
       const cacheKey = `robots:${domain}`;
       const cached = await this.redisClient.get(cacheKey);
       
       if (cached) {
-        return JSON.parse(cached);
+        const rules = JSON.parse(cached);
+        // Re-parse with URL if provided
+        if (url) {
+          return this.parseRobotsTxt(cached, url);
+        }
+        return rules;
       }
 
       // Fetch robots.txt
       const robotsUrl = `http://${domain}/robots.txt`;
       const response = await this.httpClient.get(robotsUrl);
       
-      // Parse robots.txt (simplified)
-      const rules = this.parseRobotsTxt(response.data);
+      // Parse robots.txt with URL
+      const rules = this.parseRobotsTxt(response.data, url);
       
       // Cache for 24 hours
       await this.redisClient.setEx(cacheKey, 86400, JSON.stringify(rules));
@@ -165,22 +170,51 @@ class WebCrawlerConsumer {
     }
   }
 
-  parseRobotsTxt(content) {
+  parseRobotsTxt(content, url = null) {
     const lines = content.split('\n');
     let inUserAgent = false;
     let allowed = true;
     let delay = 1000;
+    const disallowRules = [];
 
     for (const line of lines) {
-      const trimmed = line.trim().toLowerCase();
+      const trimmed = line.trim();
+      const lowerTrimmed = trimmed.toLowerCase();
       
-      if (trimmed.startsWith('user-agent:')) {
-        const userAgent = trimmed.substring(11).trim();
+      if (lowerTrimmed.startsWith('user-agent:')) {
+        const userAgent = trimmed.substring(11).trim().toLowerCase();
         inUserAgent = userAgent === '*' || userAgent.includes('webcrawler');
-      } else if (inUserAgent && trimmed.startsWith('disallow:')) {
-        allowed = false;
-      } else if (inUserAgent && trimmed.startsWith('crawl-delay:')) {
+      } else if (inUserAgent && lowerTrimmed.startsWith('disallow:')) {
+        const disallowPath = trimmed.substring(9).trim();
+        if (disallowPath) {
+          disallowRules.push(disallowPath);
+        }
+      } else if (inUserAgent && lowerTrimmed.startsWith('crawl-delay:')) {
         delay = parseInt(trimmed.substring(12).trim()) * 1000;
+      }
+    }
+
+    // If no disallow rules, allow everything
+    if (disallowRules.length === 0) {
+      return { allowed: true, delay };
+    }
+
+    // If URL is provided, check against disallow rules
+    if (url) {
+      try {
+        const urlObj = new URL(url);
+        const path = urlObj.pathname;
+        
+        for (const rule of disallowRules) {
+          // Check if URL path matches any disallow rule
+          if (rule === '/') {
+            return { allowed: false, delay }; // Disallow everything
+          } else if (path.startsWith(rule)) {
+            return { allowed: false, delay }; // URL matches disallow rule
+          }
+        }
+      } catch (error) {
+        logger.warn(`Failed to parse URL for robots.txt check: ${url}`, error.message);
       }
     }
 
@@ -195,7 +229,7 @@ class WebCrawlerConsumer {
       
       // Extract domain for robots.txt check
       const domain = new URL(url).hostname;
-      const rules = await this.getRobotsTxtRules(domain);
+      const rules = await this.getRobotsTxtRules(domain, url);
       
       if (!rules.allowed) {
         logger.info(`URL ${url} blocked by robots.txt`);
